@@ -3,6 +3,8 @@
 #include "sokol_app.h"
 #include "sokol_glue.h"
 #include "sokol_log.h"
+#include "cimgui.h"
+#include "sokol_imgui.h"
 
 // Helper library for general math operations
 #define HANDMADE_MATH_IMPLEMENTATION
@@ -18,16 +20,23 @@
 
 #define DEBUG
 
+typedef enum {
+    SOLID = 0,
+    WIREFRAME,
+    NUM_DRAW_MODES
+} draw_mode;
+
 typedef struct {
     HMM_Vec3 position;
     float* vertices;
     uint16_t* indices;
     int num_vertices;
     int num_indices;
+    draw_mode current_draw_mode;
 } plane_t;
 
 static struct {
-    sg_pipeline pip;
+    sg_pipeline pip[NUM_DRAW_MODES];
     sg_pass_action pass_action;
     sg_bindings bind;
     plane_t plane;
@@ -41,9 +50,10 @@ void destroy_plane(plane_t plane) {
     free(plane.indices);
 }
 
-plane_t make_plane(HMM_Vec3 position, int div, float width) {
+plane_t make_plane(HMM_Vec3 position, int div, float width, draw_mode mode) {
     plane_t plane = {
         .position = position,
+        .current_draw_mode = mode
     };
     // Implemented with reference to: https://www.youtube.com/watch?v=FKLbihqDLsg&ab_channel=VictorGordan
 
@@ -123,10 +133,12 @@ void init(void) {
         .logger.func = slog_func
     });
 
+    simgui_setup(&(simgui_desc_t){ 0 });
+
     // Create plane
-    int plane_division = 10; 
+    int plane_division = 1; 
     float plane_size = 1.0f;
-    state.plane = make_plane(HMM_V3(0.0f, 0.0f, 0.0f), plane_division, plane_size);
+    state.plane = make_plane(HMM_V3(0.0f, 0.0f, 0.0f), plane_division, plane_size, SOLID);
 
 #ifdef DEBUG
     printf("Num Vertices: %i\n", state.plane.num_vertices);
@@ -154,17 +166,28 @@ void init(void) {
     sg_shader shd = sg_make_shader(terrain_shader_desc(sg_query_backend()));
 
 
-    // Create pipeline
-    state.pip = sg_make_pipeline(&(sg_pipeline_desc){
+    // Create pipelines
+    state.pip[WIREFRAME] = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd,
         .index_type = SG_INDEXTYPE_UINT16,
-        // .primitive_type = SG_PRIMITIVETYPE_LINE_STRIP,
+        .primitive_type = SG_PRIMITIVETYPE_LINE_STRIP,
         .layout = {
             .attrs = {
                 [ATTR_terrain_position].format = SG_VERTEXFORMAT_FLOAT3,
             }
         },
-        .label = "terrain-pipeline"
+        .label = "terrain-wireframe-pipeline"
+    });
+    state.pip[SOLID] = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .index_type = SG_INDEXTYPE_UINT16,
+        .primitive_type = SG_PRIMITIVETYPE_TRIANGLES,
+        .layout = {
+            .attrs = {
+                [ATTR_terrain_position].format = SG_VERTEXFORMAT_FLOAT3,
+            }
+        },
+        .label = "terrain-solid-pipeline"
     });
 
     state.pass_action = (sg_pass_action) {
@@ -177,26 +200,46 @@ void init(void) {
 
 
 void event(const sapp_event* e) {
+    simgui_handle_event(e);
     if (e->type == SAPP_EVENTTYPE_KEY_DOWN) {
         if (e->key_code == SAPP_KEYCODE_ESCAPE) {
             sapp_request_quit();
+        }
+        if (e->key_code == SAPP_KEYCODE_W) {
+            state.plane.current_draw_mode = WIREFRAME;
         }
     }
 }
 
 void frame(void) {
+    simgui_new_frame(&(simgui_frame_desc_t){
+        .width = sapp_width(),
+        .height = sapp_height(),
+        .delta_time = sapp_frame_duration(),
+        .dpi_scale = sapp_dpi_scale()
+    });
+
+    // Render imgui
+    igSetNextWindowPos((ImVec2){ 10, 10}, ImGuiCond_Once);
+    igSetNextWindowSize((ImVec2){ 400, 100}, ImGuiCond_Once);
+    igBegin("Sokol Dirt Jam", 0, ImGuiWindowFlags_None);
+        igCheckbox("Wireframe", &state.wireframe);
+    igEnd();
+
+    state.plane.current_draw_mode = state.wireframe ? WIREFRAME : SOLID;
+
     // Calculate view projection matrix
-    HMM_Mat4 proj = HMM_Perspective_RH_ZO(HMM_AngleDeg(60.0f), sapp_widthf() / sapp_heightf(), 0.01f, 10.0f);
-    HMM_Mat4 view = HMM_LookAt_RH(HMM_V3(0.0f, 1.5f, -1.0f), state.plane.position, HMM_V3(0.0f, 1.0f, 0.0f));
+    HMM_Mat4 proj = HMM_Perspective_LH_ZO(HMM_AngleDeg(60.0f), sapp_widthf() / sapp_heightf(), 0.01f, 10.0f);
+    HMM_Mat4 view = HMM_LookAt_LH(HMM_V3(0.0f, 2.0f, -2.0f), HMM_V3(0.0f, 0.0f, 0.0f), HMM_V3(0.0f, 1.0f, 0.0f));
     HMM_Mat4 view_proj = HMM_MulM4(proj, view);
 
     // Model rotation matrix
     const float t = (float)(sapp_frame_duration() * 60.0f); 
     state.ry += 0.5f * t;
-    HMM_Mat4 rym = HMM_Rotate_RH(HMM_AngleDeg(state.ry), HMM_V3(0.0f, 1.0f, 0.0f));
+    HMM_Mat4 rym = HMM_Rotate_LH(HMM_AngleDeg(state.ry), HMM_V3(0.0f, 1.0f, 0.0f));
 
     sg_begin_pass(&(sg_pass) { .action = state.pass_action, .swapchain = sglue_swapchain() });
-        sg_apply_pipeline(state.pip);
+        sg_apply_pipeline(state.pip[state.plane.current_draw_mode]);
         sg_apply_bindings(&state.bind);
 
         // Apply model view projection matrix
@@ -204,11 +247,13 @@ void frame(void) {
         state.vs_params.mvp = HMM_MulM4(view_proj, model);
         sg_apply_uniforms(UB_vs_params, &SG_RANGE(state.vs_params));
         sg_draw(0, state.plane.num_indices, 1);
+        simgui_render();
     sg_end_pass();
     sg_commit();
 }
 
 void cleanup(void) {
+    simgui_shutdown();
     sg_shutdown();
     destroy_plane(state.plane);
 }
