@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(cimgui-sokol-starterkit)
+project(sokol-dirt-jam)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 11)
 # Linux -pthread shenanigans
