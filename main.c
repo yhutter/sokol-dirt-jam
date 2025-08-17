@@ -18,13 +18,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define DEBUG
-
-typedef enum {
-    SOLID = 0,
-    WIREFRAME,
-    NUM_DRAW_MODES
-} draw_mode;
+// #define DEBUG
 
 typedef struct {
     HMM_Vec3 position;
@@ -32,17 +26,16 @@ typedef struct {
     uint16_t* indices;
     int num_vertices;
     int num_indices;
-    draw_mode current_draw_mode;
+    float width;
 } plane_t;
 
 static struct {
-    sg_pipeline pip[NUM_DRAW_MODES];
+    sg_pipeline pip;
     sg_pass_action pass_action;
     sg_bindings bind;
     plane_t plane;
     vs_params_t vs_params;
     float ry;
-    bool wireframe;
 } state;
 
 void destroy_plane(plane_t plane) {
@@ -50,10 +43,10 @@ void destroy_plane(plane_t plane) {
     free(plane.indices);
 }
 
-plane_t make_plane(HMM_Vec3 position, int div, float width, draw_mode mode) {
+plane_t make_plane(HMM_Vec3 position, int div, float width) {
     plane_t plane = {
         .position = position,
-        .current_draw_mode = mode
+        .width = width
     };
     // Implemented with reference to: https://www.youtube.com/watch?v=FKLbihqDLsg&ab_channel=VictorGordan
 
@@ -79,14 +72,12 @@ plane_t make_plane(HMM_Vec3 position, int div, float width, draw_mode mode) {
     }
 
 #ifdef DEBUG
-    /*
     for (int i = 0; i < plane.num_vertices;  i++) {
         float x = plane.vertices[3 * i + 0];
         float y = plane.vertices[3 * i + 1] ;
         float z = plane.vertices[3 * i + 2];
         printf("Vertex %i -> (%f, %f, %f)\n", i, x, y, z);
     }
-    */
 #endif
 
     // Construct indices
@@ -117,11 +108,9 @@ plane_t make_plane(HMM_Vec3 position, int div, float width, draw_mode mode) {
     }
 
 #ifdef DEBUG
-    /*
     for (int i = 0; i < plane.num_indices;  i++) {
         printf("Indices %i\n", plane.indices[i]);
     }
-    */
 #endif
 
     return plane;
@@ -136,9 +125,9 @@ void init(void) {
     simgui_setup(&(simgui_desc_t){ 0 });
 
     // Create plane
-    int plane_division = 1; 
+    int plane_division = 64; 
     float plane_size = 1.0f;
-    state.plane = make_plane(HMM_V3(0.0f, 0.0f, 0.0f), plane_division, plane_size, SOLID);
+    state.plane = make_plane(HMM_V3(0.0f, 0.0f, 0.0f), plane_division, plane_size);
 
 #ifdef DEBUG
     printf("Num Vertices: %i\n", state.plane.num_vertices);
@@ -167,18 +156,7 @@ void init(void) {
 
 
     // Create pipelines
-    state.pip[WIREFRAME] = sg_make_pipeline(&(sg_pipeline_desc){
-        .shader = shd,
-        .index_type = SG_INDEXTYPE_UINT16,
-        .primitive_type = SG_PRIMITIVETYPE_LINE_STRIP,
-        .layout = {
-            .attrs = {
-                [ATTR_terrain_position].format = SG_VERTEXFORMAT_FLOAT3,
-            }
-        },
-        .label = "terrain-wireframe-pipeline"
-    });
-    state.pip[SOLID] = sg_make_pipeline(&(sg_pipeline_desc){
+    state.pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd,
         .index_type = SG_INDEXTYPE_UINT16,
         .primitive_type = SG_PRIMITIVETYPE_TRIANGLES,
@@ -205,9 +183,6 @@ void event(const sapp_event* e) {
         if (e->key_code == SAPP_KEYCODE_ESCAPE) {
             sapp_request_quit();
         }
-        if (e->key_code == SAPP_KEYCODE_W) {
-            state.plane.current_draw_mode = WIREFRAME;
-        }
     }
 }
 
@@ -223,14 +198,12 @@ void frame(void) {
     igSetNextWindowPos((ImVec2){ 10, 10}, ImGuiCond_Once);
     igSetNextWindowSize((ImVec2){ 400, 100}, ImGuiCond_Once);
     igBegin("Sokol Dirt Jam", 0, ImGuiWindowFlags_None);
-        igCheckbox("Wireframe", &state.wireframe);
     igEnd();
 
-    state.plane.current_draw_mode = state.wireframe ? WIREFRAME : SOLID;
 
     // Calculate view projection matrix
     HMM_Mat4 proj = HMM_Perspective_LH_ZO(HMM_AngleDeg(60.0f), sapp_widthf() / sapp_heightf(), 0.01f, 10.0f);
-    HMM_Mat4 view = HMM_LookAt_LH(HMM_V3(0.0f, 2.0f, -2.0f), HMM_V3(0.0f, 0.0f, 0.0f), HMM_V3(0.0f, 1.0f, 0.0f));
+    HMM_Mat4 view = HMM_LookAt_LH(HMM_V3(0.0f, 1.5f, -1.0f), HMM_V3(0.0f, 0.0f, 0.0f), HMM_V3(0.0f, 1.0f, 0.0f));
     HMM_Mat4 view_proj = HMM_MulM4(proj, view);
 
     // Model rotation matrix
@@ -239,11 +212,12 @@ void frame(void) {
     HMM_Mat4 rym = HMM_Rotate_LH(HMM_AngleDeg(state.ry), HMM_V3(0.0f, 1.0f, 0.0f));
 
     sg_begin_pass(&(sg_pass) { .action = state.pass_action, .swapchain = sglue_swapchain() });
-        sg_apply_pipeline(state.pip[state.plane.current_draw_mode]);
+        sg_apply_pipeline(state.pip);
         sg_apply_bindings(&state.bind);
 
         // Apply model view projection matrix
         HMM_Mat4 model = HMM_MulM4(HMM_Translate(state.plane.position), rym);
+        state.vs_params.plane_width = state.plane.width;
         state.vs_params.mvp = HMM_MulM4(view_proj, model);
         sg_apply_uniforms(UB_vs_params, &SG_RANGE(state.vs_params));
         sg_draw(0, state.plane.num_indices, 1);
