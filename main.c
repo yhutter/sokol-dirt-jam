@@ -31,8 +31,10 @@ typedef struct {
 
 typedef struct {
     HMM_Vec3 position;
+    HMM_Vec3 target_position;
     HMM_Vec3 front;
     HMM_Vec3 up;
+    float smoothness;
     float speed;
     float yaw;
     float pitch;
@@ -191,8 +193,10 @@ void init(void) {
     // Create camera
     state.camera = (camera_t) {
         .position = HMM_V3(0.0f, 1.5f, 4.0f),
+        .target_position = HMM_V3(0.0f, 1.5f, 4.0f),
         .up = HMM_V3(0.0f, 1.0f, 0.0f),
         .front = HMM_V3(0.0f, 0.0f, -1.0f),
+        .smoothness = 10.0f, // Higher = snappier, lower = smoother
         .speed = 10.0f,
         .yaw = -90.0f,
         .pitch = 0.0f
@@ -206,8 +210,6 @@ void event(const sapp_event* e) {
     float dt = sapp_frame_duration();
     float camera_speed = state.camera.speed * dt;
 
-
-    
     // Updating camera implemented with: https://learnopengl.com/Getting-started/Camera
     if (e-> type == SAPP_EVENTTYPE_MOUSE_MOVE) {
         float mouse_sensitivity = 0.05f;
@@ -234,16 +236,16 @@ void event(const sapp_event* e) {
             sapp_request_quit();
         }
         if (e->key_code == SAPP_KEYCODE_W) {
-            state.camera.position = HMM_AddV3(state.camera.position, HMM_MulV3F(state.camera.front, camera_speed));
+            state.camera.target_position = HMM_AddV3(state.camera.target_position, HMM_MulV3F(state.camera.front, camera_speed));
         }
         if (e->key_code == SAPP_KEYCODE_S) {
-            state.camera.position = HMM_SubV3(state.camera.position, HMM_MulV3F(state.camera.front, camera_speed));
+            state.camera.target_position = HMM_SubV3(state.camera.target_position, HMM_MulV3F(state.camera.front, camera_speed));
         }
         if (e->key_code == SAPP_KEYCODE_A) {
-            state.camera.position = HMM_AddV3(state.camera.position, HMM_MulV3F(HMM_NormV3(HMM_Cross(state.camera.front, state.camera.up)), camera_speed));
+            state.camera.target_position = HMM_AddV3(state.camera.target_position, HMM_MulV3F(HMM_NormV3(HMM_Cross(state.camera.front, state.camera.up)), camera_speed));
         }
         if (e->key_code == SAPP_KEYCODE_D) {
-            state.camera.position = HMM_SubV3(state.camera.position, HMM_MulV3F(HMM_NormV3(HMM_Cross(state.camera.front, state.camera.up)), camera_speed));
+            state.camera.target_position = HMM_SubV3(state.camera.target_position, HMM_MulV3F(HMM_NormV3(HMM_Cross(state.camera.front, state.camera.up)), camera_speed));
         }
     }
 }
@@ -256,7 +258,19 @@ void frame(void) {
         .dpi_scale = sapp_dpi_scale()
     });
 
-    state.time += sapp_frame_duration();
+    // Make sure mouse is locked
+    if (!sapp_mouse_locked()) {
+        sapp_lock_mouse(true);
+    }
+
+    float dt = sapp_frame_duration();
+    state.time += dt;
+
+    // Smoothly interpolate camera position 
+    state.camera.position = HMM_AddV3(
+        HMM_MulV3F(state.camera.position, 1.0f - state.camera.smoothness * dt),
+        HMM_MulV3F(state.camera.target_position, state.camera.smoothness * dt)
+    );
 
     // Render imgui
     igSetNextWindowPos((ImVec2){ 10, 10}, ImGuiCond_Once);
