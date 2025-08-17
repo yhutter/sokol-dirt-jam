@@ -29,14 +29,27 @@ typedef struct {
     float width;
 } plane_t;
 
+typedef struct {
+    HMM_Vec3 position;
+    HMM_Vec3 front;
+    HMM_Vec3 up;
+    float speed;
+    float yaw;
+    float pitch;
+} camera_t;
+
 static struct {
     sg_pipeline pip;
     sg_pass_action pass_action;
     sg_bindings bind;
     plane_t plane;
+    camera_t camera;
     vs_params_t vs_params;
     float ry;
+    float time;
+    bool first_move;
 } state;
+
 
 void destroy_plane(plane_t plane) {
     free(plane.vertices);
@@ -174,14 +187,63 @@ void init(void) {
             .clear_value = {0x28 / 255.0f, 0x29 / 255.0f, 0x23 / 255.0f, 1.0f}
         }
     };
+
+    // Create camera
+    state.camera = (camera_t) {
+        .position = HMM_V3(0.0f, 1.5f, 4.0f),
+        .up = HMM_V3(0.0f, 1.0f, 0.0f),
+        .front = HMM_V3(0.0f, 0.0f, -1.0f),
+        .speed = 10.0f,
+        .yaw = -90.0f,
+        .pitch = 0.0f
+    };
+    state.first_move = true;
 }
 
 
 void event(const sapp_event* e) {
     simgui_handle_event(e);
+    float dt = sapp_frame_duration();
+    float camera_speed = state.camera.speed * dt;
+
+
+    
+    // Updating camera implemented with: https://learnopengl.com/Getting-started/Camera
+    if (e-> type == SAPP_EVENTTYPE_MOUSE_MOVE) {
+        float mouse_sensitivity = 0.05f;
+        state.camera.yaw += e->mouse_dx * mouse_sensitivity;
+        state.camera.pitch += e->mouse_dy * mouse_sensitivity;
+        
+        // Limit pitch
+        if (state.camera.pitch > 89.0f) {
+            state.camera.pitch = 89.0f;
+        }
+        if (state.camera.pitch < -89.0f) {
+            state.camera.pitch = -89.0f;
+        }
+        float x = cosf(HMM_AngleDeg(state.camera.yaw)) * cosf(HMM_AngleDeg(state.camera.pitch));
+        float y = sinf(HMM_AngleDeg(state.camera.pitch));
+        float z = sinf(HMM_AngleDeg(state.camera.yaw)) * cosf(HMM_AngleDeg(state.camera.pitch));
+        HMM_Vec3 direction = HMM_V3(x, y, z);
+        state.camera.front = HMM_NormV3(direction);
+    }
+
+
     if (e->type == SAPP_EVENTTYPE_KEY_DOWN) {
         if (e->key_code == SAPP_KEYCODE_ESCAPE) {
             sapp_request_quit();
+        }
+        if (e->key_code == SAPP_KEYCODE_W) {
+            state.camera.position = HMM_AddV3(state.camera.position, HMM_MulV3F(state.camera.front, camera_speed));
+        }
+        if (e->key_code == SAPP_KEYCODE_S) {
+            state.camera.position = HMM_SubV3(state.camera.position, HMM_MulV3F(state.camera.front, camera_speed));
+        }
+        if (e->key_code == SAPP_KEYCODE_A) {
+            state.camera.position = HMM_AddV3(state.camera.position, HMM_MulV3F(HMM_NormV3(HMM_Cross(state.camera.front, state.camera.up)), camera_speed));
+        }
+        if (e->key_code == SAPP_KEYCODE_D) {
+            state.camera.position = HMM_SubV3(state.camera.position, HMM_MulV3F(HMM_NormV3(HMM_Cross(state.camera.front, state.camera.up)), camera_speed));
         }
     }
 }
@@ -194,6 +256,8 @@ void frame(void) {
         .dpi_scale = sapp_dpi_scale()
     });
 
+    state.time += sapp_frame_duration();
+
     // Render imgui
     igSetNextWindowPos((ImVec2){ 10, 10}, ImGuiCond_Once);
     igSetNextWindowSize((ImVec2){ 400, 100}, ImGuiCond_Once);
@@ -203,7 +267,7 @@ void frame(void) {
 
     // Calculate view projection matrix
     HMM_Mat4 proj = HMM_Perspective_LH_ZO(HMM_AngleDeg(60.0f), sapp_widthf() / sapp_heightf(), 0.01f, 10.0f);
-    HMM_Mat4 view = HMM_LookAt_LH(HMM_V3(0.0f, 1.5f, -1.0f), HMM_V3(0.0f, 0.0f, 0.0f), HMM_V3(0.0f, 1.0f, 0.0f));
+    HMM_Mat4 view = HMM_LookAt_LH(state.camera.position, HMM_AddV3(state.camera.position, state.camera.front), state.camera.up);
     HMM_Mat4 view_proj = HMM_MulM4(proj, view);
 
     // Model rotation matrix
@@ -242,7 +306,7 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         .height = 720,
         .window_title = "Sokol Dirt Jam",
         .icon.sokol_default = true,
-        // .sample_count = 4,
-        .logger.func = slog_func
+        .sample_count = 4,
+        .logger.func = slog_func,
     };
 }
