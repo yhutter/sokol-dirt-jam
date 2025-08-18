@@ -175,6 +175,11 @@ void init(void) {
         .shader = shd,
         .index_type = SG_INDEXTYPE_UINT16,
         .primitive_type = SG_PRIMITIVETYPE_TRIANGLES,
+        .cull_mode = SG_CULLMODE_NONE,
+        .depth = {
+            .compare = SG_COMPAREFUNC_LESS_EQUAL,
+            .write_enabled = true
+        },
         .layout = {
             .attrs = {
                 [ATTR_terrain_position].format = SG_VERTEXFORMAT_FLOAT3,
@@ -190,9 +195,6 @@ void init(void) {
         }
     };
 
-    state.vs_params.base_color[0] = 0xB1 / 255.0f;
-    state.vs_params.base_color[1] = 0x4F / 255.0f;
-    state.vs_params.base_color[2] = 0x36 / 255.0f;
 
     // Create camera
     state.camera = (camera_t) {
@@ -208,6 +210,16 @@ void init(void) {
 
     state.mouse_locked = true;
     sapp_lock_mouse(state.mouse_locked);
+
+    // Setup parameter values for tweaking
+    state.vs_params.base_color[0] = 0xB1 / 255.0f;
+    state.vs_params.base_color[1] = 0x4F / 255.0f;
+    state.vs_params.base_color[2] = 0x36 / 255.0f;
+    state.vs_params.peak_color[0] = 0xFF / 255.0f;
+    state.vs_params.peak_color[1] = 0xFF / 255.0f;
+    state.vs_params.peak_color[2] = 0xFF / 255.0f;
+    state.vs_params.hurst_exponent = 0.9f;
+    state.vs_params.num_octaves = 6;
 }
 
 
@@ -282,10 +294,13 @@ void frame(void) {
 
     // Render imgui
     igSetNextWindowPos((ImVec2){ 10, 10}, ImGuiCond_Once);
-    igSetNextWindowSize((ImVec2){ 400, 100}, ImGuiCond_Once);
+    igSetNextWindowSize((ImVec2){ 400, 200}, ImGuiCond_Once);
     igBegin("Sokol Dirt Jam", 0, ImGuiWindowFlags_None);
         igColorEdit3("Clear Color", &state.pass_action.colors[0].clear_value.r, ImGuiColorEditFlags_None);
         igColorEdit3("Base Color", state.vs_params.base_color, ImGuiColorEditFlags_None);
+        igColorEdit3("Peak Color", state.vs_params.peak_color, ImGuiColorEditFlags_None);
+        igSliderFloatEx("Hurst Exponent", &state.vs_params.hurst_exponent, 0.0f, 1.0f, "%.3f",  ImGuiSliderFlags_None);
+        igSliderIntEx("Num Octaves", &state.vs_params.num_octaves, 0, 6, "%d",  ImGuiSliderFlags_None);
     igEnd();
 
 

@@ -76,6 +76,34 @@ float cnoise(vec3 P) {
     float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x);
     return 2.2 * n_xyz;
 }
+
+// Taken from https://iquilezles.org/articles/fbm/
+float fbm(vec3 x, float hurst_exponent, int num_octaves) {
+    float g = exp2(-hurst_exponent);
+    float f = 1.0f;
+    float a = 1.0f;
+    float t = 0.0f;
+    for (int i = 0; i < num_octaves; i++) {
+        t += a * cnoise(f * x);
+        f *= 2.0;
+        a *= g;
+    }
+    return t;
+}
+
+// Taken from https://thebookofshaders.com/13/
+float turbulence(vec3 x, float hurst_exponent, int num_octaves) {
+    float g = exp2(-hurst_exponent);
+    float f = 1.0f;
+    float a = 1.0f;
+    float t = 0.0f;
+    for (int i = 0; i < num_octaves; i++) {
+        t += a * abs(cnoise(f * x));
+        f *= 2.0;
+        a *= g;
+    }
+    return t;
+}
 @end
 
 
@@ -96,7 +124,10 @@ layout(binding=0) uniform vs_params {
     mat4 mvp;
     float plane_width;
     float time;
+    float hurst_exponent;
+    int num_octaves;
     vec3 base_color;
+    vec3 peak_color;
 };
 
 layout(location=0) in vec4 position;
@@ -107,10 +138,11 @@ void main() {
     float x = remap(position.x, -plane_half, plane_half, -1.0f, 1.0f);
     float y = position.y;
     float z = remap(position.z, -plane_half, plane_half, -1.0f, 1.0f);
-    float displacement = cnoise(vec3(x, y, z));
+    float displacement = turbulence(vec3(x, y, z), hurst_exponent, num_octaves);
     vec3 displaced_position = vec3(position.x, position.y + displacement, position.z);
     gl_Position = mvp * vec4(displaced_position, 1.0);
-    color = vec4(base_color, 1.0f);
+    // color = vec4(mix(base_color, peak_color, displacement), 1.0f);
+    color = vec4(mix(base_color, peak_color, smoothstep(displacement, -1.0f, 0.1f)), 1.0f);
 }
 @end
 
