@@ -1,90 +1,91 @@
 @ctype mat4 HMM_Mat4
 
 @block noise_functions
-// https://gist.github.com/patriciogonzalezvivo/670c22f3966e662d2f83
+// https://thebookofshaders.com/edit.php#11/2d-snoise-clear.frag
 
-//	Classic Perlin 3D Noise
-//	by Stefan Gustavson (https://github.com/stegu/webgl-noise)
-vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
-vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
-vec3 fade(vec3 t) {return t*t*t*(t*(t*6.0-15.0)+10.0);}
+// Some useful functions
+vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
 
-float cnoise(vec3 P) {
-    vec3 Pi0 = floor(P); // Integer part for indexing
-    vec3 Pi1 = Pi0 + vec3(1.0); // Integer part + 1
-    Pi0 = mod(Pi0, 289.0);
-    Pi1 = mod(Pi1, 289.0);
-    vec3 Pf0 = fract(P); // Fractional part for interpolation
-    vec3 Pf1 = Pf0 - vec3(1.0); // Fractional part - 1.0
-    vec4 ix = vec4(Pi0.x, Pi1.x, Pi0.x, Pi1.x);
-    vec4 iy = vec4(Pi0.yy, Pi1.yy);
-    vec4 iz0 = Pi0.zzzz;
-    vec4 iz1 = Pi1.zzzz;
+//
+// Description : GLSL 2D simplex noise function
+//      Author : Ian McEwan, Ashima Arts
+//  Maintainer : ijm
+//     Lastmod : 20110822 (ijm)
+//     License :
+//  Copyright (C) 2011 Ashima Arts. All rights reserved.
+//  Distributed under the MIT License. See LICENSE file.
+//  https://github.com/ashima/webgl-noise
+//
+float snoise(vec2 v) {
 
-    vec4 ixy = permute(permute(ix) + iy);
-    vec4 ixy0 = permute(ixy + iz0);
-    vec4 ixy1 = permute(ixy + iz1);
+    // Precompute values for skewed triangular grid
+    const vec4 C = vec4(0.211324865405187,
+                        // (3.0-sqrt(3.0))/6.0
+                        0.366025403784439,
+                        // 0.5*(sqrt(3.0)-1.0)
+                        -0.577350269189626,
+                        // -1.0 + 2.0 * C.x
+                        0.024390243902439);
+                        // 1.0 / 41.0
 
-    vec4 gx0 = ixy0 / 7.0;
-    vec4 gy0 = fract(floor(gx0) / 7.0) - 0.5;
-    gx0 = fract(gx0);
-    vec4 gz0 = vec4(0.5) - abs(gx0) - abs(gy0);
-    vec4 sz0 = step(gz0, vec4(0.0));
-    gx0 -= sz0 * (step(0.0, gx0) - 0.5);
-    gy0 -= sz0 * (step(0.0, gy0) - 0.5);
+    // First corner (x0)
+    vec2 i  = floor(v + dot(v, C.yy));
+    vec2 x0 = v - i + dot(i, C.xx);
 
-    vec4 gx1 = ixy1 / 7.0;
-    vec4 gy1 = fract(floor(gx1) / 7.0) - 0.5;
-    gx1 = fract(gx1);
-    vec4 gz1 = vec4(0.5) - abs(gx1) - abs(gy1);
-    vec4 sz1 = step(gz1, vec4(0.0));
-    gx1 -= sz1 * (step(0.0, gx1) - 0.5);
-    gy1 -= sz1 * (step(0.0, gy1) - 0.5);
+    // Other two corners (x1, x2)
+    vec2 i1 = vec2(0.0);
+    i1 = (x0.x > x0.y)? vec2(1.0, 0.0):vec2(0.0, 1.0);
+    vec2 x1 = x0.xy + C.xx - i1;
+    vec2 x2 = x0.xy + C.zz;
 
-    vec3 g000 = vec3(gx0.x,gy0.x,gz0.x);
-    vec3 g100 = vec3(gx0.y,gy0.y,gz0.y);
-    vec3 g010 = vec3(gx0.z,gy0.z,gz0.z);
-    vec3 g110 = vec3(gx0.w,gy0.w,gz0.w);
-    vec3 g001 = vec3(gx1.x,gy1.x,gz1.x);
-    vec3 g101 = vec3(gx1.y,gy1.y,gz1.y);
-    vec3 g011 = vec3(gx1.z,gy1.z,gz1.z);
-    vec3 g111 = vec3(gx1.w,gy1.w,gz1.w);
+    // Do some permutations to avoid
+    // truncation effects in permutation
+    i = mod289(i);
+    vec3 p = permute(
+            permute( i.y + vec3(0.0, i1.y, 1.0))
+                + i.x + vec3(0.0, i1.x, 1.0 ));
 
-    vec4 norm0 = taylorInvSqrt(vec4(dot(g000, g000), dot(g010, g010), dot(g100, g100), dot(g110, g110)));
-    g000 *= norm0.x;
-    g010 *= norm0.y;
-    g100 *= norm0.z;
-    g110 *= norm0.w;
-    vec4 norm1 = taylorInvSqrt(vec4(dot(g001, g001), dot(g011, g011), dot(g101, g101), dot(g111, g111)));
-    g001 *= norm1.x;
-    g011 *= norm1.y;
-    g101 *= norm1.z;
-    g111 *= norm1.w;
+    vec3 m = max(0.5 - vec3(
+                        dot(x0,x0),
+                        dot(x1,x1),
+                        dot(x2,x2)
+                        ), 0.0);
 
-    float n000 = dot(g000, Pf0);
-    float n100 = dot(g100, vec3(Pf1.x, Pf0.yz));
-    float n010 = dot(g010, vec3(Pf0.x, Pf1.y, Pf0.z));
-    float n110 = dot(g110, vec3(Pf1.xy, Pf0.z));
-    float n001 = dot(g001, vec3(Pf0.xy, Pf1.z));
-    float n101 = dot(g101, vec3(Pf1.x, Pf0.y, Pf1.z));
-    float n011 = dot(g011, vec3(Pf0.x, Pf1.yz));
-    float n111 = dot(g111, Pf1);
+    m = m*m ;
+    m = m*m ;
 
-    vec3 fade_xyz = fade(Pf0);
-    vec4 n_z = mix(vec4(n000, n100, n010, n110), vec4(n001, n101, n011, n111), fade_xyz.z);
-    vec2 n_yz = mix(n_z.xy, n_z.zw, fade_xyz.y);
-    float n_xyz = mix(n_yz.x, n_yz.y, fade_xyz.x);
-    return 2.2 * n_xyz;
+    // Gradients:
+    //  41 pts uniformly over a line, mapped onto a diamond
+    //  The ring size 17*17 = 289 is close to a multiple
+    //      of 41 (41*7 = 287)
+
+    vec3 x = 2.0 * fract(p * C.www) - 1.0;
+    vec3 h = abs(x) - 0.5;
+    vec3 ox = floor(x + 0.5);
+    vec3 a0 = x - ox;
+
+    // Normalise gradients implicitly by scaling m
+    // Approximation of: m *= inversesqrt(a0*a0 + h*h);
+    m *= 1.79284291400159 - 0.85373472095314 * (a0*a0+h*h);
+
+    // Compute final noise value at P
+    vec3 g = vec3(0.0);
+    g.x  = a0.x  * x0.x  + h.x  * x0.y;
+    g.yz = a0.yz * vec2(x1.x,x2.x) + h.yz * vec2(x1.y,x2.y);
+    return 130.0 * dot(m, g);
 }
 
+
 // Taken from https://iquilezles.org/articles/fbm/
-float fbm(vec3 x, float hurst_exponent, int num_octaves) {
+float fbm(vec2 x, float hurst_exponent, int num_octaves) {
     float g = exp2(-hurst_exponent);
     float f = 1.0f;
     float a = 1.0f;
     float t = 0.0f;
     for (int i = 0; i < num_octaves; i++) {
-        t += a * cnoise(f * x);
+        t += a * snoise(f * x);
         f *= 2.0;
         a *= g;
     }
@@ -92,13 +93,13 @@ float fbm(vec3 x, float hurst_exponent, int num_octaves) {
 }
 
 // Taken from https://thebookofshaders.com/13/
-float turbulence(vec3 x, float hurst_exponent, int num_octaves) {
+float turbulence(vec2 x, float hurst_exponent, int num_octaves) {
     float g = exp2(-hurst_exponent);
     float f = 1.0f;
     float a = 1.0f;
     float t = 0.0f;
     for (int i = 0; i < num_octaves; i++) {
-        t += a * abs(cnoise(f * x));
+        t += a * abs(snoise(f * x));
         f *= 2.0;
         a *= g;
     }
@@ -125,8 +126,8 @@ float remap(float value, float min_in, float max_in, float min_out, float max_ou
 
 layout(binding=0) uniform vs_params {
     mat4 mvp;
-    float plane_width;
     float time;
+    float amplitude;
     float hurst_exponent;
     int num_octaves;
     vec3 base_color;
@@ -138,24 +139,22 @@ layout(location=0) in vec4 position;
 out vec4 color;
 
 void main() {
-    float plane_half = plane_width * 0.5f;
-    float x = remap(position.x, -plane_half, plane_half, -1.0f, 1.0f);
-    float y = position.y;
-    float z = remap(position.z, -plane_half, plane_half, -1.0f, 1.0f);
     float displacement = 0.0f;
     if (noise_func_type == NOISE_FUNC_TYPE_FBM) {
-        displacement = fbm(vec3(x, y, z), hurst_exponent, num_octaves);
+        displacement = fbm(position.xz, hurst_exponent, num_octaves);
     }
     else if (noise_func_type == NOISE_FUNC_TYPE_TURBULENCE) {
-        displacement = turbulence(vec3(x, y, z), hurst_exponent, num_octaves);
+        displacement = turbulence(position.xz, hurst_exponent, num_octaves);
     }
     else {
-        displacement = cnoise(vec3(x, y, z));
+        displacement = snoise(position.xz);
     }
+    displacement *= amplitude;
     vec3 displaced_position = vec3(position.x, position.y + displacement, position.z);
     gl_Position = mvp * vec4(displaced_position, 1.0);
-    // color = vec4(mix(base_color, peak_color, displacement), 1.0f);
-    color = vec4(mix(base_color, peak_color, smoothstep(displacement, -1.0f, 0.1f)), 1.0f);
+    // TODO: This is probably not optimal investigate for another solution
+    displacement = clamp(displacement, 0.0f, 1.0f);
+    color = vec4(mix(base_color, peak_color, displacement), 1.0f);
 }
 @end
 
