@@ -96,6 +96,7 @@ layout(binding=0) uniform vs_params {
     mat4 mvp;
     float plane_width;
     float time;
+    vec3 base_color;
 };
 
 layout(location=0) in vec4 position;
@@ -109,7 +110,7 @@ void main() {
     float displacement = cnoise(vec3(x, y, z));
     vec3 displaced_position = vec3(position.x, position.y + displacement, position.z);
     gl_Position = mvp * vec4(displaced_position, 1.0);
-    color = vec4(1.0, 0.0, 0.0, 1.0);
+    color = vec4(base_color, 1.0f);
 }
 @end
 

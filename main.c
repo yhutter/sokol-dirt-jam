@@ -49,7 +49,7 @@ static struct {
     vs_params_t vs_params;
     float ry;
     float time;
-    bool first_move;
+    bool mouse_locked;
 } state;
 
 
@@ -186,14 +186,18 @@ void init(void) {
     state.pass_action = (sg_pass_action) {
         .colors[0] = {
             .load_action = SG_LOADACTION_CLEAR,
-            .clear_value = {0x28 / 255.0f, 0x29 / 255.0f, 0x23 / 255.0f, 1.0f}
+            .clear_value = {0x0E / 255.0f, 0x09 / 255.0f, 0x08 / 255.0f, 1.0f}
         }
     };
 
+    state.vs_params.base_color[0] = 0xB1 / 255.0f;
+    state.vs_params.base_color[1] = 0x4F / 255.0f;
+    state.vs_params.base_color[2] = 0x36 / 255.0f;
+
     // Create camera
     state.camera = (camera_t) {
-        .position = HMM_V3(0.0f, 1.5f, 4.0f),
-        .target_position = HMM_V3(0.0f, 1.5f, 4.0f),
+        .position = HMM_V3(0.0f, 0.5f, 2.5f),
+        .target_position = HMM_V3(0.0f, 0.5f, 2.5f),
         .up = HMM_V3(0.0f, 1.0f, 0.0f),
         .front = HMM_V3(0.0f, 0.0f, -1.0f),
         .smoothness = 10.0f, // Higher = snappier, lower = smoother
@@ -201,7 +205,9 @@ void init(void) {
         .yaw = -90.0f,
         .pitch = 0.0f
     };
-    state.first_move = true;
+
+    state.mouse_locked = true;
+    sapp_lock_mouse(state.mouse_locked);
 }
 
 
@@ -211,7 +217,7 @@ void event(const sapp_event* e) {
     float camera_speed = state.camera.speed * dt;
 
     // Updating camera implemented with: https://learnopengl.com/Getting-started/Camera
-    if (e-> type == SAPP_EVENTTYPE_MOUSE_MOVE) {
+    if (e-> type == SAPP_EVENTTYPE_MOUSE_MOVE && state.mouse_locked) {
         float mouse_sensitivity = 0.05f;
         state.camera.yaw += e->mouse_dx * mouse_sensitivity;
         state.camera.pitch += e->mouse_dy * mouse_sensitivity;
@@ -230,6 +236,13 @@ void event(const sapp_event* e) {
         state.camera.front = HMM_NormV3(direction);
     }
 
+    
+    if (e->type == SAPP_EVENTTYPE_KEY_UP) {
+        if (e->key_code == SAPP_KEYCODE_X) {
+            state.mouse_locked = !state.mouse_locked;
+            sapp_lock_mouse(state.mouse_locked);
+        }
+    }
 
     if (e->type == SAPP_EVENTTYPE_KEY_DOWN) {
         if (e->key_code == SAPP_KEYCODE_ESCAPE) {
@@ -258,11 +271,6 @@ void frame(void) {
         .dpi_scale = sapp_dpi_scale()
     });
 
-    // Make sure mouse is locked
-    if (!sapp_mouse_locked()) {
-        sapp_lock_mouse(true);
-    }
-
     float dt = sapp_frame_duration();
     state.time += dt;
 
@@ -276,6 +284,8 @@ void frame(void) {
     igSetNextWindowPos((ImVec2){ 10, 10}, ImGuiCond_Once);
     igSetNextWindowSize((ImVec2){ 400, 100}, ImGuiCond_Once);
     igBegin("Sokol Dirt Jam", 0, ImGuiWindowFlags_None);
+        igColorEdit3("Clear Color", &state.pass_action.colors[0].clear_value.r, ImGuiColorEditFlags_None);
+        igColorEdit3("Base Color", state.vs_params.base_color, ImGuiColorEditFlags_None);
     igEnd();
 
 
