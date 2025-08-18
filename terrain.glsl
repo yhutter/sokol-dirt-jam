@@ -120,6 +120,9 @@ float remap(float value, float min_in, float max_in, float min_out, float max_ou
 @include_block noise_functions
 @include_block util_functions
 
+#define NOISE_FUNC_TYPE_TURBULENCE 0
+#define NOISE_FUNC_TYPE_FBM 1
+
 layout(binding=0) uniform vs_params {
     mat4 mvp;
     float plane_width;
@@ -128,6 +131,7 @@ layout(binding=0) uniform vs_params {
     int num_octaves;
     vec3 base_color;
     vec3 peak_color;
+    int noise_func_type;
 };
 
 layout(location=0) in vec4 position;
@@ -138,7 +142,16 @@ void main() {
     float x = remap(position.x, -plane_half, plane_half, -1.0f, 1.0f);
     float y = position.y;
     float z = remap(position.z, -plane_half, plane_half, -1.0f, 1.0f);
-    float displacement = turbulence(vec3(x, y, z), hurst_exponent, num_octaves);
+    float displacement = 0.0f;
+    if (noise_func_type == NOISE_FUNC_TYPE_FBM) {
+        displacement = fbm(vec3(x, y, z), hurst_exponent, num_octaves);
+    }
+    else if (noise_func_type == NOISE_FUNC_TYPE_TURBULENCE) {
+        displacement = turbulence(vec3(x, y, z), hurst_exponent, num_octaves);
+    }
+    else {
+        displacement = cnoise(vec3(x, y, z));
+    }
     vec3 displaced_position = vec3(position.x, position.y + displacement, position.z);
     gl_Position = mvp * vec4(displaced_position, 1.0);
     // color = vec4(mix(base_color, peak_color, displacement), 1.0f);

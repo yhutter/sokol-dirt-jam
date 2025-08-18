@@ -20,6 +20,14 @@
 
 // #define DEBUG
 
+typedef enum {
+    TURBULENCE = 0,
+    FBM = 1,
+    PERLIN = 2,
+    NOISE_FUNC_COUNT
+
+} noise_func_type;
+
 typedef struct {
     HMM_Vec3 position;
     float* vertices;
@@ -220,6 +228,7 @@ void init(void) {
     state.vs_params.peak_color[2] = 0xFF / 255.0f;
     state.vs_params.hurst_exponent = 0.9f;
     state.vs_params.num_octaves = 6;
+    state.vs_params.noise_func_type = TURBULENCE;
 }
 
 
@@ -301,6 +310,7 @@ void frame(void) {
         igColorEdit3("Peak Color", state.vs_params.peak_color, ImGuiColorEditFlags_None);
         igSliderFloatEx("Hurst Exponent", &state.vs_params.hurst_exponent, 0.0f, 1.0f, "%.3f",  ImGuiSliderFlags_None);
         igSliderIntEx("Num Octaves", &state.vs_params.num_octaves, 0, 6, "%d",  ImGuiSliderFlags_None);
+        igComboChar("Noise Function", &state.vs_params.noise_func_type, (const char*[NOISE_FUNC_COUNT]) {"Turbulence", "FBM", "Perlin"}, NOISE_FUNC_COUNT);
     igEnd();
 
 
