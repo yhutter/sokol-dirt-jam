@@ -78,20 +78,6 @@ float snoise(vec2 v) {
 }
 
 
-// Taken from https://iquilezles.org/articles/fbm/
-float fbm(vec2 x, float hurst_exponent, int num_octaves) {
-    float g = exp2(-hurst_exponent);
-    float f = 1.0f;
-    float a = 1.0f;
-    float t = 0.0f;
-    for (int i = 0; i < num_octaves; i++) {
-        t += a * snoise(f * x);
-        f *= 2.0;
-        a *= g;
-    }
-    return t;
-}
-
 // Taken from https://thebookofshaders.com/13/
 float turbulence(vec2 x, float hurst_exponent, int num_octaves) {
     float g = exp2(-hurst_exponent);
@@ -108,21 +94,12 @@ float turbulence(vec2 x, float hurst_exponent, int num_octaves) {
 @end
 
 
-@block util_functions
-// https://gist.github.com/companje/29408948f1e8be54dd5733a74ca49bb9
-float remap(float value, float min_in, float max_in, float min_out, float max_out) {
-    return min_out + (value - min_in) * (max_out - min_out) / (max_in - min_in);
-}
-@end
-
-
 @vs vs
 
 @include_block noise_functions
-@include_block util_functions
 
 #define NOISE_FUNC_TYPE_TURBULENCE 0
-#define NOISE_FUNC_TYPE_FBM 1
+#define NOISE_FUNC_TYPE_SIMPLEX_NOISE 1
 
 layout(binding=0) uniform vs_params {
     mat4 mvp;
@@ -133,6 +110,7 @@ layout(binding=0) uniform vs_params {
     vec3 base_color;
     vec3 peak_color;
     int noise_func_type;
+    float peak_color_threshold;
 };
 
 layout(location=0) in vec4 position;
@@ -140,21 +118,27 @@ out vec4 color;
 
 void main() {
     float displacement = 0.0f;
-    if (noise_func_type == NOISE_FUNC_TYPE_FBM) {
-        displacement = fbm(position.xz, hurst_exponent, num_octaves);
+    float mix_value = 0.0f;
+    vec3 mix_color = vec3(0.0f);
+    switch (noise_func_type) {
+        case NOISE_FUNC_TYPE_TURBULENCE:
+            displacement = turbulence(position.xz, hurst_exponent, num_octaves);
+            mix_value = displacement;
+            mix_color = mix(base_color, peak_color, smoothstep(mix_value, -peak_color_threshold, peak_color_threshold));
+            break;
+        case NOISE_FUNC_TYPE_SIMPLEX_NOISE: 
+            // Simplex noise returns value from -1 to 1 -> remap to range 0 to 1.
+            displacement = snoise(position.xz);
+            mix_value = (displacement * 0.5f) + 0.5f;
+            mix_color = mix(base_color, peak_color, mix_value);
+            break;
     }
-    else if (noise_func_type == NOISE_FUNC_TYPE_TURBULENCE) {
-        displacement = turbulence(position.xz, hurst_exponent, num_octaves);
-    }
-    else {
-        displacement = snoise(position.xz);
-    }
+
     displacement *= amplitude;
     vec3 displaced_position = vec3(position.x, position.y + displacement, position.z);
+
     gl_Position = mvp * vec4(displaced_position, 1.0);
-    // TODO: This is probably not optimal investigate for another solution
-    displacement = clamp(displacement, 0.0f, 1.0f);
-    color = vec4(mix(base_color, peak_color, displacement), 1.0f);
+    color = vec4(mix_color, 1.0f);
 }
 @end
 

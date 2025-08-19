@@ -22,8 +22,7 @@
 
 typedef enum {
     TURBULENCE = 0,
-    FBM = 1,
-    SIMPLEX = 2,
+    SIMPLEX = 1,
     NOISE_FUNC_COUNT
 
 } noise_func_type;
@@ -231,6 +230,7 @@ void init(void) {
     state.vs_params.num_octaves = 6;
     state.vs_params.amplitude = 1.0f;
     state.vs_params.noise_func_type = TURBULENCE;
+    state.vs_params.peak_color_threshold = 1.0f;
 }
 
 
@@ -305,15 +305,16 @@ void frame(void) {
 
     // Render imgui
     igSetNextWindowPos((ImVec2){ 10, 10}, ImGuiCond_Once);
-    igSetNextWindowSize((ImVec2){ 400, 200}, ImGuiCond_Once);
+    igSetNextWindowSize((ImVec2){ 400, 300}, ImGuiCond_Once);
     igBegin("Sokol Dirt Jam", 0, ImGuiWindowFlags_None);
         igColorEdit3("Clear Color", &state.pass_action.colors[0].clear_value.r, ImGuiColorEditFlags_None);
         igColorEdit3("Base Color", state.vs_params.base_color, ImGuiColorEditFlags_None);
         igColorEdit3("Peak Color", state.vs_params.peak_color, ImGuiColorEditFlags_None);
+        igSliderFloatEx("Peak Color Threshold", &state.vs_params.peak_color_threshold, 0.1f, 5.0f, "%.3f",  ImGuiSliderFlags_None);
         igSliderFloatEx("Hurst Exponent", &state.vs_params.hurst_exponent, 0.0f, 1.0f, "%.3f",  ImGuiSliderFlags_None);
         igSliderFloatEx("Amplitude", &state.vs_params.amplitude, 0.0f, 1.0f, "%.3f",  ImGuiSliderFlags_None);
         igSliderIntEx("Num Octaves", &state.vs_params.num_octaves, 0, 6, "%d",  ImGuiSliderFlags_None);
-        igComboChar("Noise Function", &state.vs_params.noise_func_type, (const char*[NOISE_FUNC_COUNT]) {"Turbulence", "FBM", "Simplex"}, NOISE_FUNC_COUNT);
+        igComboChar("Noise Function", &state.vs_params.noise_func_type, (const char*[NOISE_FUNC_COUNT]) {"Turbulence", "Simplex"}, NOISE_FUNC_COUNT);
     igEnd();
 
 
