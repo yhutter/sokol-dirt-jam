@@ -103,7 +103,6 @@ float turbulence(vec2 x, float hurst_exponent, int num_octaves) {
 
 layout(binding=0) uniform vs_params {
     mat4 mvp;
-    float time;
     float amplitude;
     float hurst_exponent;
     int num_octaves;

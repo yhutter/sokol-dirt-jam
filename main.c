@@ -55,8 +55,8 @@ static struct {
     camera_t camera;
     vs_params_t vs_params;
     float ry;
-    float time;
     bool mouse_locked;
+    bool animate;
 } state;
 
 
@@ -216,6 +216,7 @@ void init(void) {
     };
 
     state.mouse_locked = true;
+    state.animate = true;
 
     sapp_lock_mouse(state.mouse_locked);
 
@@ -252,6 +253,7 @@ void event(const sapp_event* e) {
         if (state.camera.pitch < -89.0f) {
             state.camera.pitch = -89.0f;
         }
+
         float x = cosf(HMM_AngleDeg(state.camera.yaw)) * cosf(HMM_AngleDeg(state.camera.pitch));
         float y = sinf(HMM_AngleDeg(state.camera.pitch));
         float z = sinf(HMM_AngleDeg(state.camera.yaw)) * cosf(HMM_AngleDeg(state.camera.pitch));
@@ -295,7 +297,6 @@ void frame(void) {
     });
 
     float dt = sapp_frame_duration();
-    state.time += dt;
 
     // Smoothly interpolate camera position 
     state.camera.position = HMM_AddV3(
@@ -315,6 +316,7 @@ void frame(void) {
         igSliderFloatEx("Amplitude", &state.vs_params.amplitude, 0.0f, 1.0f, "%.3f",  ImGuiSliderFlags_None);
         igSliderIntEx("Num Octaves", &state.vs_params.num_octaves, 0, 6, "%d",  ImGuiSliderFlags_None);
         igComboChar("Noise Function", &state.vs_params.noise_func_type, (const char*[NOISE_FUNC_COUNT]) {"Turbulence", "Simplex"}, NOISE_FUNC_COUNT);
+        igCheckbox("Animate", &state.animate);
     igEnd();
 
 
@@ -324,8 +326,10 @@ void frame(void) {
     HMM_Mat4 view_proj = HMM_MulM4(proj, view);
 
     // Model rotation matrix
-    const float t = (float)(sapp_frame_duration() * 60.0f); 
-    state.ry += 0.5f * t;
+    if (state.animate) {
+        const float t = (float)(sapp_frame_duration() * 60.0f); 
+        state.ry += 0.5f * t;
+    }
     HMM_Mat4 rym = HMM_Rotate_LH(HMM_AngleDeg(state.ry), HMM_V3(0.0f, 1.0f, 0.0f));
 
     sg_begin_pass(&(sg_pass) { .action = state.pass_action, .swapchain = sglue_swapchain() });
