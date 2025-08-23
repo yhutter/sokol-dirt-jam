@@ -30,7 +30,7 @@ typedef enum {
 typedef struct {
     HMM_Vec3 position;
     float* vertices;
-    uint16_t* indices;
+    uint32_t* indices;
     int num_vertices;
     int num_indices;
     float width;
@@ -104,7 +104,7 @@ plane_t make_plane(HMM_Vec3 position, int div, float width) {
 
     // Construct indices
     plane.num_indices = div * div * 2 * 3;
-    plane.indices = malloc(sizeof(uint16_t) * plane.num_indices);
+    plane.indices = malloc(sizeof(uint32_t) * plane.num_indices);
 
     count = 0;
     for (int row = 0; row < div; row++) {
@@ -147,8 +147,8 @@ void init(void) {
     simgui_setup(&(simgui_desc_t){ 0 });
 
     // Create plane
-    int plane_division = 64; 
-    float plane_size = 1.0f;
+    int plane_division = 512; 
+    float plane_size = 2.0f;
     state.plane = make_plane(HMM_V3(0.0f, 0.0f, 0.0f), plane_division, plane_size);
 
 #ifdef DEBUG
@@ -168,7 +168,7 @@ void init(void) {
         .usage.index_buffer = true,
         .data = (sg_range) {
             .ptr = state.plane.indices,
-            .size = sizeof(uint16_t) * state.plane.num_indices
+            .size = sizeof(uint32_t) * state.plane.num_indices
         },
         .label = "plane-indices"
     });
@@ -180,7 +180,7 @@ void init(void) {
     // Create pipelines
     state.pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd,
-        .index_type = SG_INDEXTYPE_UINT16,
+        .index_type = SG_INDEXTYPE_UINT32,
         .primitive_type = SG_PRIMITIVETYPE_TRIANGLES,
         .cull_mode = SG_CULLMODE_NONE,
         .depth = {
@@ -209,7 +209,7 @@ void init(void) {
         .target_position = HMM_V3(0.0f, 0.5f, 2.5f),
         .up = HMM_V3(0.0f, 1.0f, 0.0f),
         .front = HMM_V3(0.0f, 0.0f, -1.0f),
-        .smoothness = 10.0f, // Higher = snappier, lower = smoother
+        .smoothness = 8.0f, // Higher = snappier, lower = smoother
         .speed = 10.0f,
         .yaw = -90.0f,
         .pitch = 0.0f
@@ -229,9 +229,10 @@ void init(void) {
     state.vs_params.peak_color[2] = 0xFF / 255.0f;
     state.vs_params.hurst_exponent = 0.9f;
     state.vs_params.num_octaves = 6;
-    state.vs_params.amplitude = 1.0f;
+    state.vs_params.amplitude = 0.28f;
     state.vs_params.noise_func_type = TURBULENCE;
     state.vs_params.peak_color_threshold = 1.0f;
+    state.vs_params.normal_step_size= 0.0001f;
 }
 
 
@@ -303,6 +304,9 @@ void frame(void) {
         HMM_MulV3F(state.camera.position, 1.0f - state.camera.smoothness * dt),
         HMM_MulV3F(state.camera.target_position, state.camera.smoothness * dt)
     );
+    state.vs_params.camera_position[0] = state.camera.position.X;
+    state.vs_params.camera_position[1] = state.camera.position.Y;
+    state.vs_params.camera_position[2] = state.camera.position.Z;
 
     // Render imgui
     igSetNextWindowPos((ImVec2){ 10, 10}, ImGuiCond_Once);
@@ -316,6 +320,7 @@ void frame(void) {
         igSliderFloatEx("Amplitude", &state.vs_params.amplitude, 0.0f, 1.0f, "%.3f",  ImGuiSliderFlags_None);
         igSliderIntEx("Num Octaves", &state.vs_params.num_octaves, 0, 6, "%d",  ImGuiSliderFlags_None);
         igComboChar("Noise Function", &state.vs_params.noise_func_type, (const char*[NOISE_FUNC_COUNT]) {"Turbulence", "Simplex"}, NOISE_FUNC_COUNT);
+        igSliderFloatEx("Normal Step Size", &state.vs_params.normal_step_size, 0.0f, 1.0f, "%.6f",  ImGuiSliderFlags_None);
         igCheckbox("Animate", &state.animate);
     igEnd();
 
@@ -338,7 +343,8 @@ void frame(void) {
 
         // Apply model view projection matrix
         HMM_Mat4 model = HMM_MulM4(HMM_Translate(state.plane.position), rym);
-        state.vs_params.mvp = HMM_MulM4(view_proj, model);
+        state.vs_params.model_matrix = model;
+        state.vs_params.mvp_matrix = HMM_MulM4(view_proj, model);
         sg_apply_uniforms(UB_vs_params, &SG_RANGE(state.vs_params));
         sg_draw(0, state.plane.num_indices, 1);
         simgui_render();

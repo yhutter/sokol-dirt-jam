@@ -1,9 +1,8 @@
 @ctype mat4 HMM_Mat4
 
 @block noise_functions
-// https://thebookofshaders.com/edit.php#11/2d-snoise-clear.frag
 
-// Some useful functions
+// https://thebookofshaders.com/edit.php#11/2d-snoise-clear.frag
 vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
@@ -91,8 +90,30 @@ float turbulence(vec2 x, float hurst_exponent, int num_octaves) {
     }
     return t;
 }
-@end
 
+// Normal calculation based on center difference method: https://iquilezles.org/articles/terrainmarching/
+
+vec3 normal_turbulence(vec3 p, float hurst_exponent, int num_octaves, float step_size) {
+    return normalize(
+        vec3(
+            turbulence(vec2(p.x - step_size, p.z), hurst_exponent, num_octaves) - turbulence(vec2(p.x + step_size, p.z), hurst_exponent, num_octaves),
+            2.0f * step_size,
+            turbulence(vec2(p.x, p.z - step_size), hurst_exponent, num_octaves) - turbulence(vec2(p.x, p.z + step_size), hurst_exponent, num_octaves)
+        )
+    );
+}
+
+vec3 normal_snoise(vec3 p, float step_size) {
+    return normalize(
+        vec3(
+            snoise(vec2(p.x - step_size, p.z)) - snoise(vec2(p.x + step_size, p.z)),
+            2.0f * step_size,
+            snoise(vec2(p.x, p.z - step_size)) - snoise(vec2(p.x, p.z + step_size))
+        )
+    );
+}
+
+@end
 
 @vs vs
 
@@ -102,7 +123,8 @@ float turbulence(vec2 x, float hurst_exponent, int num_octaves) {
 #define NOISE_FUNC_TYPE_SIMPLEX_NOISE 1
 
 layout(binding=0) uniform vs_params {
-    mat4 mvp;
+    mat4 mvp_matrix;
+    mat4 model_matrix;
     float amplitude;
     float hurst_exponent;
     int num_octaves;
@@ -110,24 +132,32 @@ layout(binding=0) uniform vs_params {
     vec3 peak_color;
     int noise_func_type;
     float peak_color_threshold;
+    float normal_step_size;
+    vec3 camera_position;
 };
 
 layout(location=0) in vec4 position;
 out vec4 color;
+out vec3 normal;
+out vec3 position_world;
+out vec3 camera;
 
 void main() {
     float displacement = 0.0f;
     float mix_value = 0.0f;
     vec3 mix_color = vec3(0.0f);
+    vec3 calculated_normal = vec3(0.0);
     switch (noise_func_type) {
         case NOISE_FUNC_TYPE_TURBULENCE:
             displacement = turbulence(position.xz, hurst_exponent, num_octaves);
+            calculated_normal = normal_turbulence(position.xyz, hurst_exponent, num_octaves, normal_step_size);
             mix_value = displacement;
             mix_color = mix(base_color, peak_color, smoothstep(mix_value, -peak_color_threshold, peak_color_threshold));
             break;
         case NOISE_FUNC_TYPE_SIMPLEX_NOISE: 
-            // Simplex noise returns value from -1 to 1 -> remap to range 0 to 1.
             displacement = snoise(position.xz);
+            calculated_normal = normal_snoise(position.xyz, normal_step_size);
+            // Simplex noise returns value from -1 to 1 -> remap to range 0 to 1.
             mix_value = (displacement * 0.5f) + 0.5f;
             mix_color = mix(base_color, peak_color, mix_value);
             break;
@@ -136,17 +166,57 @@ void main() {
     displacement *= amplitude;
     vec3 displaced_position = vec3(position.x, position.y + displacement, position.z);
 
-    gl_Position = mvp * vec4(displaced_position, 1.0);
+    gl_Position = mvp_matrix * vec4(displaced_position, 1.0);
     color = vec4(mix_color, 1.0f);
+    normal = (model_matrix * vec4(calculated_normal, 0.0f)).xyz;
+    position_world = (model_matrix * vec4(displaced_position, 1.0f)).xyz;
+    camera = camera_position;
 }
 @end
 
 @fs fs
 in vec4 color;
+in vec3 normal;
+in vec3 position_world;
+in vec3 camera;
 out vec4 frag_color;
 
 void main() {
-    frag_color = color;
+    vec3 normalized_normal = normalize(normal);
+    vec3 view_direction = normalize(camera - position_world);
+
+    vec3 base_colour = color.rgb;
+    vec3 lighting = vec3(0.0f);
+
+    // Ambient
+    vec3 ambient = vec3(0.5);
+
+    // Diffuse
+    vec3 light_dir = normalize(vec3(1.0, 1.0, 1.0));
+    vec3 light_color = vec3(1.0, 1.0, 0.9);
+    float dp = max(0.0, dot(light_dir, normalized_normal));
+
+    // Cell Shading
+    dp *= smoothstep(0.5, 0.505, dp);
+
+    vec3 diffuse = dp * light_color;
+
+    // Phong specular
+    vec3 r  = normalize(reflect(-light_dir, normal));
+    float phong_value = max(0.0, dot(view_direction, r));
+    phong_value = pow(phong_value, 128.0);
+    vec3 specular = vec3(phong_value);
+    specular = smoothstep(0.5, 0.51, specular);
+
+    // Lighting is sum of all lighting sources.
+    lighting = diffuse * 0.8;
+
+    vec3 colour = base_colour * lighting + specular;
+
+    // Appromixation of converting from linear to srgb color space.
+    colour = pow(colour, vec3(1.0 / 2.2));
+
+    frag_color = vec4(colour, 1.0f);
 }
 @end
 
