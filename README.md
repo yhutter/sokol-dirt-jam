@@ -13,7 +13,8 @@
 ```bash
 mkdir build
 chmod +x ./build.sh
-./build.sh
+./build.sh # Build Development Version
+./build.sh release # Build Release Version
 ```
 
 ## :game_die: Controls
