@@ -92,7 +92,6 @@ float turbulence(vec2 x, float hurst_exponent, int num_octaves) {
 }
 
 // Normal calculation based on center difference method: https://iquilezles.org/articles/terrainmarching/
-
 vec3 normal_turbulence(vec3 p, float hurst_exponent, int num_octaves, float step_size) {
     return normalize(
         vec3(

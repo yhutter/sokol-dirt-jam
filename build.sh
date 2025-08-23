@@ -1,5 +1,5 @@
 # Compile Shaders
-sokol-shdc -i terrain.glsl -l metal_macos -f sokol -o terrain_shader.h
+sokol-shdc -i terrain.glsl -l metal_macos:glsl430:hlsl5  -f sokol -o terrain_shader.h
 
 # Build Application
 cd build
