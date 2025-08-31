@@ -198,7 +198,7 @@ void init(void) {
     state.pass_action = (sg_pass_action) {
         .colors[0] = {
             .load_action = SG_LOADACTION_CLEAR,
-            .clear_value = {0x0E / 255.0f, 0x09 / 255.0f, 0x08 / 255.0f, 1.0f}
+            .clear_value = {0x0A / 255.0f, 0x0A / 255.0f, 0x0A / 255.0f, 1.0f}
         }
     };
 
@@ -221,12 +221,12 @@ void init(void) {
     sapp_lock_mouse(state.mouse_locked);
 
     // Setup parameter values for tweaking
-    state.vs_params.base_color[0] = 0xB1 / 255.0f;
-    state.vs_params.base_color[1] = 0x4F / 255.0f;
-    state.vs_params.base_color[2] = 0x36 / 255.0f;
-    state.vs_params.peak_color[0] = 0xFF / 255.0f;
-    state.vs_params.peak_color[1] = 0xFF / 255.0f;
-    state.vs_params.peak_color[2] = 0xFF / 255.0f;
+    state.vs_params.base_color[0] = 0x0A/ 255.0f;
+    state.vs_params.base_color[1] = 0x0A / 255.0f;
+    state.vs_params.base_color[2] = 0x0A / 255.0f;
+    state.vs_params.peak_color[0] = 0x64 / 255.0f;
+    state.vs_params.peak_color[1] = 0xB2 / 255.0f;
+    state.vs_params.peak_color[2] = 0xDB / 255.0f;
     state.vs_params.hurst_exponent = 0.9f;
     state.vs_params.num_octaves = 6;
     state.vs_params.amplitude = 0.28f;

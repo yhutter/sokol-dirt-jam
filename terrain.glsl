@@ -200,17 +200,10 @@ void main() {
 
     vec3 diffuse = dp * light_color;
 
-    // Phong specular
-    vec3 r  = normalize(reflect(-light_dir, normal));
-    float phong_value = max(0.0, dot(view_direction, r));
-    phong_value = pow(phong_value, 128.0);
-    vec3 specular = vec3(phong_value);
-    specular = smoothstep(0.5, 0.51, specular);
-
     // Lighting is sum of all lighting sources.
     lighting = diffuse * 0.8;
 
-    vec3 colour = base_colour * lighting + specular;
+    vec3 colour = base_colour * lighting;
 
     // Appromixation of converting from linear to srgb color space.
     colour = pow(colour, vec3(1.0 / 2.2));
